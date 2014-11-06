@@ -1,0 +1,12 @@
+{application, erlm8,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { erlm8_app, []}},
+  {env, []}
+ ]}.

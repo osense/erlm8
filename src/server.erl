@@ -65,8 +65,9 @@ handle_cast({send, {Type, Params}}, State) ->
     {noreply, State}.
 
 handle_info({tcp, _Socket, List}, State) ->
-    log:debug(">> " ++ List),
-    case irc:parse(List) of
+    L = re:replace(List, "(\r\n)*", "", [global]),
+    log:debug(">> " ++ L),
+    case irc:parse(L) of
         {ping, Server} ->
             send_data(self(), {ping, Server});
         {privmsg, Channel, Text} ->

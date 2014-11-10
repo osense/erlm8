@@ -2,7 +2,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, start_channel/2, send_to_channel/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -13,10 +13,20 @@
 %% ===================================================================
 
 start_link() ->
-    supervisor:start_link(?MODULE, ?MODULE, []).
+    supervisor:start_link(?MODULE, []).
 
-start_channel(ChanSupPid, Chan) ->
-    supervisor:start_child(ChanSupPid, [Chan]).
+start_channel(ChanSupPid, {ServPid, Chan}) ->
+    supervisor:start_child(ChanSupPid, [ServPid, Chan]).
+
+send_to_channel(ChanSupPid, ChanName, List) ->
+    lists:map(fun({_, ChanPid, _, _}) ->
+        case channel:get_name(ChanPid) of
+            ChanName ->
+                channel:receive_list(ChanPid, List);
+            _ ->
+                []
+        end
+    end, supervisor:which_children(ChanSupPid)).
 
 
 %% ===================================================================

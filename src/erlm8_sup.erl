@@ -21,5 +21,9 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
+    Log = {log, {log, start_link, ["log.txt"]}, permanent, 1000, worker, [log]},
+
+    ServSup = {server_sup, {server_sup, start_link, []}, permanent, infinity, supervisor, [server_sup]},
+
+    {ok, { {one_for_one, 5, 10}, [Log, ServSup]} }.
 

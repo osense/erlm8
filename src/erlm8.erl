@@ -25,7 +25,7 @@ join(Chan) ->
     server:join_channel(server_sup:get_server(index, 1), Chan).
 
 join(Serv, Chan) ->
-    server:join_channel(connect(Serv), Chan).
+    server:join_channel(server_sup:get_server(name, Serv), Chan).
 
 part(Serv, Chan) ->
     server:part_channel(server_sup:get_server(name, Serv), Chan).

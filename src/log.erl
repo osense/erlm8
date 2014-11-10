@@ -40,9 +40,9 @@ init([Filename]) ->
 handle_call({set_debug, Debug}, _From, State) ->
     case Debug of
         true ->
-            log("Enabled debug logging");
+            log("enabled debug logging");
         _ ->
-            log("Disabled debug logging")
+            log("disabled debug logging")
     end,
     {reply, ok, State#state{debug_mode = Debug}}.
 

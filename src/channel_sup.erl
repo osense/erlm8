@@ -2,7 +2,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_channel/2, send_to_channel/3]).
+-export([start_link/0, start_channel/2, kill_channel/2, send_to_channel/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -17,6 +17,17 @@ start_link() ->
 
 start_channel(ChanSupPid, {ServPid, Chan}) ->
     supervisor:start_child(ChanSupPid, [ServPid, Chan]).
+
+kill_channel(ChanSupPid, ChanName) ->
+    lists:map(fun({_, ChanPid, _, _}) ->
+        case channel:get_name(ChanPid) of
+            ChanName ->
+                ok = supervisor:terminate_child(ChanSupPid, ChanPid),
+                log:log("killed channel " ++ ChanName);
+            _ ->
+                []
+        end
+    end, supervisor:which_children(ChanSupPid)).
 
 send_to_channel(ChanSupPid, ChanName, List) ->
     lists:map(fun({_, ChanPid, _, _}) ->

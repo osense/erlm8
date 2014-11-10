@@ -3,7 +3,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--export([start_link/2, get_name/1, join_channel/2, send_data/2]).
+-export([start_link/2, get_name/1, join_channel/2, part_channel/2, send_data/2]).
 
 -record(state, {
     server_name,
@@ -24,6 +24,9 @@ get_name(ServPid) ->
 
 join_channel(ServPid, Chan) ->
     gen_server:cast(ServPid, {join_channel, Chan}).
+
+part_channel(ServPid, Chan) ->
+    gen_server:cast(ServPid, {part_channel, Chan}).
 
 send_data(ServPid, Data) ->
     gen_server:cast(ServPid, {send, Data}).
@@ -51,6 +54,9 @@ handle_call(get_name, _From, State) ->
 
 handle_cast({join_channel, Chan}, State) ->
     channel_sup:start_channel(State#state.channel_sup, {self(), Chan}),
+    {noreply, State};
+handle_cast({part_channel, Chan}, State) ->
+    channel_sup:kill_channel(State#state.channel_sup, Chan),
     {noreply, State};
 handle_cast({send, {Type, Params}}, State) ->
     List = irc:format(Type, Params),

@@ -29,6 +29,7 @@ receive_list(ChanPid, Data) ->
 %% ===================================================================
 
 init([ServPid, Channel]) ->
+    process_flag(trap_exit, true),
     server:send_data(ServPid, {join, Channel}),
     {ok, #state {
         server_pid = ServPid,
@@ -46,5 +47,6 @@ handle_info(_Info, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(Reason, _State) ->
+terminate(Reason, State) ->
+    server:send_data(State#state.server_pid, {part, State#state.channel_name}),
     {shutdown, Reason}.

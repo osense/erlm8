@@ -23,6 +23,8 @@ format(ping, Server) ->
     "PONG :" ++ Server;
 format(join, Chan) ->
     "JOIN :" ++ Chan;
+format(part, Chan) ->
+    "PART :" ++ Chan;
 format(privmsg, {Channel, Text}) ->
     "PRIVMSG :" ++ Channel ++ " :" ++ Text;
 format(memsg, {Channel, Text}) ->

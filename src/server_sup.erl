@@ -3,7 +3,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_server/2, kill_server/1, get_server/1]).
+-export([start_link/0, start_server/2, kill_server/1, get_server/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -22,20 +22,16 @@ start_server(Serv, Port) ->
     Pid.
 
 kill_server(Name) ->
-    lists:map(fun({_, Child, _, _}) ->
-        case server:get_name(Child) of
-            Name ->
-                ok = supervisor:terminate_child(?MODULE, Child),
-                log:log("killed server " ++ Name);
-            _ ->
-                []
-        end
-    end, supervisor:which_children(?MODULE)).
+    ok = supervisor:terminate_child(?MODULE, get_server(name, Name)),
+    log:log("killed server " ++ Name).
 
-get_server(Index) ->
-    [H | Tail] = supervisor:which_children(?MODULE),
-    {_, Child, _, _} = H,
-    Child.
+get_server(index, Index) ->
+    ChildSpec = lists:nth(Index, supervisor:which_children(?MODULE)),
+    {_, ChildPid, _, _} = ChildSpec,
+    ChildPid;
+get_server(name, Name) ->
+    ServPids = lists:map(fun({_, Child, _, _}) -> Child end, supervisor:which_children(?MODULE)),
+    find_server_name(ServPids, Name).
 
 
 %% ===================================================================
@@ -47,3 +43,17 @@ init([]) ->
           [{server, {server, start_link, []},
             transient, 5000, worker, [server]}]}}.
 
+
+%% ===================================================================
+%% private functions
+%% ===================================================================
+
+find_server_name([], _) ->
+    error;
+find_server_name([H | Tail], Name) ->
+    case server:get_name(H) of
+        Name ->
+            H;
+        _ ->
+            find_server_name(Tail, Name)
+    end.

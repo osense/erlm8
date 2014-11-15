@@ -7,9 +7,14 @@ parse(List) ->
         {match, [Serv]} ->
             {ping, Serv};
         _ ->
-            case re:run(List, "^PRIVMSG :(?<chan>.*) :(?<text>.*)", [{capture, [1, 2], list}]) of
-                {match, [Chan, Text]} ->
-                    {privmsg, {Chan, Text}};
+            case re:run(List, "^:(?<source>.*)!.*PRIVMSG (?<chan>.*) :(?<text>.*)", [{capture, [1, 2, 3], list}]) of
+                {match, [Source, Chan, Text]} ->
+                    case re:run(Text, "^(?<target>.*): (?<text>.*)", [{capture, [1, 2], list}]) of
+                        {match, [Target, T]} ->
+                            {privmsg, {Chan, {Source, Target, T}}};
+                        _ ->
+                            {privmsg, {Chan, {Source, Text}}}
+                    end;
                 _ ->
                     {raw, List}
             end
@@ -26,6 +31,8 @@ format(join, Chan) ->
 format(part, Chan) ->
     "PART :" ++ Chan;
 format(privmsg, {Channel, Text}) ->
-    "PRIVMSG :" ++ Channel ++ " :" ++ Text;
-format(memsg, {Channel, Text}) ->
-    "PRIVMSG :" ++ Channel ++ " :\x01ACTION " ++ Text ++ "\x01".
+    "PRIVMSG " ++ Channel ++ " :" ++ Text;
+format(privmsg, {Channel, Target, Text}) ->
+    "PRIVMSG " ++ Channel ++ " :" ++ Target ++ ": " ++ Text;
+format(action, {Channel, Text}) ->
+    "PRIVMSG " ++ Channel ++ " :\x01ACTION " ++ Text ++ "\x01".

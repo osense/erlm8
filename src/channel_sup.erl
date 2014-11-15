@@ -2,7 +2,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_channel/2, kill_channel/2, send_to_channel/3]).
+-export([start_link/0, start_channel/2, kill_channel/2, get_channel/2, send_to_channel/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -19,25 +19,22 @@ start_channel(ChanSupPid, {ServPid, Chan}) ->
     supervisor:start_child(ChanSupPid, [ServPid, Chan]).
 
 kill_channel(ChanSupPid, ChanName) ->
-    lists:map(fun({_, ChanPid, _, _}) ->
-        case channel:get_name(ChanPid) of
-            ChanName ->
-                ok = supervisor:terminate_child(ChanSupPid, ChanPid),
-                log:log("killed channel " ++ ChanName);
-            _ ->
-                []
-        end
-    end, supervisor:which_children(ChanSupPid)).
+    ok = supervisor:terminate_child(ChanSupPid, get_channel(ChanSupPid, ChanName)).
 
 send_to_channel(ChanSupPid, ChanName, List) ->
-    lists:map(fun({_, ChanPid, _, _}) ->
-        case channel:get_name(ChanPid) of
-            ChanName ->
-                channel:receive_list(ChanPid, List);
+    channel:receive_list(get_channel(ChanSupPid, ChanName), List).
+
+get_channel(ChanSupPid, Name) ->
+    ChanPids = lists:map(fun({_, Child, _, _}) -> Child end, supervisor:which_children(ChanSupPid)),
+    FindChanFun = fun F([H | Tail], N) ->
+        case channel:get_name(H) of
+            Name ->
+                H;
             _ ->
-                []
+                F(Tail, N)
         end
-    end, supervisor:which_children(ChanSupPid)).
+    end,
+    FindChanFun(ChanPids, Name).
 
 
 %% ===================================================================

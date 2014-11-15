@@ -17,7 +17,8 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 start_server(Serv, Port) ->
-    log:log("starting server " ++ Serv ++ " on port " ++ integer_to_list(Port)),
+    LogMessage = io_lib:format("starting server ~p on port ~p", [Serv, Port]),
+    log:log(LogMessage),
     supervisor:start_child(?MODULE, [Serv, Port]).
 
 kill_server(Name) ->

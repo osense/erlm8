@@ -22,11 +22,11 @@ start_link(Serv, Port) ->
 get_name(ServPid) ->
     gen_server:call(ServPid, get_name).
 
-join_channel(ServPid, Chan) ->
-    gen_server:cast(ServPid, {join_channel, Chan}).
+join_channel(ServPid, ChanName) ->
+    gen_server:cast(ServPid, {join_channel, ChanName}).
 
-part_channel(ServPid, Chan) ->
-    gen_server:cast(ServPid, {part_channel, Chan}).
+part_channel(ServPid, ChanName) ->
+    gen_server:cast(ServPid, {part_channel, ChanName}).
 
 send_data(ServPid, Data) ->
     gen_server:cast(ServPid, {send, Data}).
@@ -52,21 +52,23 @@ init([Serv, Port]) ->
 handle_call(get_name, _From, State) ->
     {reply, State#state.server_name, State}.
 
-handle_cast({join_channel, Chan}, State) ->
-    channel_sup:start_channel(State#state.channel_sup, {self(), Chan}),
+handle_cast({join_channel, ChanName}, State) ->
+    log:info("joining ~p on ~p", [ChanName, State#state.server_name]),
+    channel_sup:start_channel(State#state.channel_sup, {self(), ChanName}),
     {noreply, State};
-handle_cast({part_channel, Chan}, State) ->
-    channel_sup:kill_channel(State#state.channel_sup, Chan),
+handle_cast({part_channel, ChanName}, State) ->
+    channel_sup:kill_channel(State#state.channel_sup, ChanName),
+    log:info("left ~p on ~p", [ChanName, State#state.server_name]),
     {noreply, State};
 handle_cast({send, {Type, Params}}, State) ->
     List = irc:format(Type, Params),
-    log:debug("<< " ++ List),
+    log:debug("<< ~p", [List]),
     gen_tcp:send(State#state.tcp_socket, List ++ "\r\n"),
     {noreply, State}.
 
 handle_info({tcp, _Socket, List}, State) ->
-    L = re:replace(List, "(\r\n)*", "", [global]),
-    log:debug(">> " ++ L),
+    L = re:replace(List, "(\r\n)*", "", [global, {return, list}]),
+    log:debug(">> ~p", [L]),
     case irc:parse(L) of
         {ping, Server} ->
             send_data(self(), {ping, Server});

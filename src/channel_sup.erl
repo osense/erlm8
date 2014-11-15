@@ -15,8 +15,8 @@
 start_link() ->
     supervisor:start_link(?MODULE, []).
 
-start_channel(ChanSupPid, {ServPid, Chan}) ->
-    supervisor:start_child(ChanSupPid, [ServPid, Chan]).
+start_channel(ChanSupPid, {ServPid, ChanName}) ->
+    supervisor:start_child(ChanSupPid, [ServPid, ChanName]).
 
 kill_channel(ChanSupPid, ChanName) ->
     ok = supervisor:terminate_child(ChanSupPid, get_channel(ChanSupPid, ChanName)).

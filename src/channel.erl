@@ -7,6 +7,7 @@
 
 -record(state, {
     server_pid,
+    eventmgr,
     channel_name}).
 
 
@@ -14,11 +15,11 @@
 %% API functions
 %% ===================================================================
 
-start_link(ServPid, Channel) ->
-    gen_server:start_link(?MODULE, [ServPid, Channel], []).
+start_link(ServPid, ChanName) ->
+    gen_server:start_link(?MODULE, [ServPid, ChanName], []).
 
-get_name(ServPid) ->
-    gen_server:call(ServPid, get_name).
+get_name(ChanPid) ->
+    gen_server:call(ChanPid, get_name).
 
 receive_list(ChanPid, Data) ->
     gen_server:cast(ChanPid, {receive_list, Data}).
@@ -28,12 +29,13 @@ receive_list(ChanPid, Data) ->
 %% gen_server callbacks
 %% ===================================================================
 
-init([ServPid, Channel]) ->
+init([ServPid, ChanName]) ->
     process_flag(trap_exit, true),
-    server:send_data(ServPid, {join, Channel}),
+    server:send_data(ServPid, {join, ChanName}),
     {ok, #state {
         server_pid = ServPid,
-        channel_name = Channel}}.
+        eventmgr = gen_event:start_link(),
+        channel_name = ChanName}}.
 
 handle_call(get_name, _From, State) ->
     {reply, State#state.channel_name, State}.

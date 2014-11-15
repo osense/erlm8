@@ -17,13 +17,12 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 start_server(Serv, Port) ->
-    LogMessage = io_lib:format("starting server ~p on port ~p", [Serv, Port]),
-    log:log(LogMessage),
+    log:info("starting server ~p on port ~p", [Serv, Port]),
     supervisor:start_child(?MODULE, [Serv, Port]).
 
 kill_server(Name) ->
     ok = supervisor:terminate_child(?MODULE, get_server(name, Name)),
-    log:log("killed server " ++ Name).
+    log:info("killed server ~p", [Name]).
 
 get_server(index, Index) ->
     ChildSpec = lists:nth(Index, supervisor:which_children(?MODULE)),

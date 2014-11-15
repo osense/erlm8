@@ -3,7 +3,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--export([start_link/1, set_debug/1, log/1, debug/1]).
+-export([start_link/1, set_debug/1, info/1, info/2, debug/1, debug/2]).
 
 -record(state, {
     filename,
@@ -20,11 +20,17 @@ start_link(Filename) ->
 set_debug(Debug) when is_boolean(Debug) ->
     gen_server:call(?MODULE, {set_debug, Debug}).
 
-log(Text) ->
-    gen_server:cast(?MODULE, {log, Text}).
+info(Text) ->
+    gen_server:cast(?MODULE, {info, Text}).
+
+info(Text, Args) ->
+    gen_server:cast(?MODULE, {info, io_lib:format(Text, Args)}).
 
 debug(Text) ->
     gen_server:cast(?MODULE, {debug, Text}).
+
+debug(Text, Args) ->
+    gen_server:cast(?MODULE, {debug, io_lib:format(Text, Args)}).
 
 
 %% ===================================================================
@@ -40,13 +46,13 @@ init([Filename]) ->
 handle_call({set_debug, Debug}, _From, State) ->
     case Debug of
         true ->
-            log("enabled debug logging");
+            info("enabled debug logging");
         _ ->
-            log("disabled debug logging")
+            info("disabled debug logging")
     end,
     {reply, ok, State#state{debug_mode = Debug}}.
 
-handle_cast({log, Text}, State = #state {filename = File}) ->
+handle_cast({info, Text}, State = #state {filename = File}) ->
     file:write_file(File, Text ++ "\n", [append]),
     {noreply, State};
 handle_cast({debug, Text}, State = #state {filename = File, debug_mode = Debug}) ->

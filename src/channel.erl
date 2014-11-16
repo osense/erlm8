@@ -3,7 +3,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--export([start_link/2, load_plugin/2, get_name/1, get_nick/1, receive_data/2]).
+-export([start_link/2, load_plugin/2, get_server/1, get_name/1, receive_data/2]).
 
 -record(state, {
     server_pid,
@@ -21,11 +21,11 @@ start_link(ServPid, ChanName) ->
 load_plugin(ChanPid, Plugin) ->
     gen_server:cast(ChanPid, {load_plugin, Plugin}).
 
+get_server(ChanPid) ->
+    gen_server:call(ChanPid, get_server).
+
 get_name(ChanPid) ->
     gen_server:call(ChanPid, get_name).
-
-get_nick(ChanPid) ->
-    gen_server:call(ChanPid, get_nick).
 
 receive_data(ChanPid, Data) ->
     gen_server:cast(ChanPid, {receive_data, Data}).
@@ -39,30 +39,31 @@ init([ServPid, ChanName]) ->
     process_flag(trap_exit, true),
     {ok, EventMgr} = gen_event:start_link(),
     server:send_data(ServPid, {join, ChanName}),
-    load_plugin(self(), plugin_m8ball),
+    load_plugin(self(), plugin_channel),
     {ok, #state {
         server_pid = ServPid,
         channel_name = ChanName,
         event_manager = EventMgr}}.
 
+
+handle_call(get_server, _From, State) ->
+    {reply, State#state.server_pid, State};
 handle_call(get_name, _From, State) ->
-    {reply, State#state.channel_name, State};
-handle_call(get_nick, _From, State) ->
-    {reply, server:get_nick(State#state.server_pid), State}.
+    {reply, State#state.channel_name, State}.
 
 handle_cast({receive_data, Data}, State) ->
     gen_event:notify(State#state.event_manager, Data),
     {noreply, State};
 handle_cast({load_plugin, Plugin}, State) ->
-    gen_event:add_handler(State#state.event_manager, Plugin, [self()]),
+    gen_event:add_sup_handler(State#state.event_manager, Plugin, [self()]),
     {noreply, State}.
 
-handle_info({Target, Text}, State) ->
-    log:debug("kek"),
-    server:send_data(State#state.server_pid, {privmsg, {State#state.channel_name, Target, Text}}),
+handle_info({gen_event_EXIT, Handler, Reason}, State) ->
+    log:info("~p crashed, restarting(~n~p)", [Handler, Reason]),
+    load_plugin(self(), Handler),
     {noreply, State};
-handle_info(Text, State) ->
-    server:send_data(State#state.server_pid, {privmsg, {State#state.channel_name, Text}}),
+handle_info(Data, State) ->
+    server:send_data(State#state.server_pid, Data),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->

@@ -3,7 +3,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--export([start_link/2, get_name/1, join_channel/2, part_channel/2, set_nick/2, get_nick/1, send_data/2]).
+-export([start_link/2, get_name/1, join_channel/2, part_channel/2, get_channel/2, set_nick/2, get_nick/1, send_data/2]).
 
 -record(state, {
     server_name,
@@ -28,6 +28,9 @@ join_channel(ServPid, ChanName) ->
 
 part_channel(ServPid, ChanName) ->
     gen_server:cast(ServPid, {part_channel, ChanName}).
+
+get_channel(ServPid, ChanName) ->
+    gen_server:call(ServPid, {get_channel, ChanName}).
 
 set_nick(ServPid, NickName) ->
     gen_server:cast(ServPid, {set_nick, NickName}).
@@ -60,7 +63,9 @@ init([Serv, Port]) ->
 handle_call(get_name, _From, State) ->
     {reply, State#state.server_name, State};
 handle_call(get_nick, _From, State) ->
-    {reply, State#state.nick, State}.
+    {reply, State#state.nick, State};
+handle_call({get_channel, ChanName}, _From, State) ->
+    {reply, channel_sup:get_channel(State#state.channel_sup, ChanName), State}.
 
 handle_cast({join_channel, ChanName}, State) ->
     log:info("joining ~p on ~p", [ChanName, State#state.server_name]),

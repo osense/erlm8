@@ -84,8 +84,8 @@ handle_info({gen_event_EXIT, Handler, Reason}, State) ->
     log:info("~p crashed, restarting(~n~p)", [Handler, Reason]),
     load_plugin(self(), Handler),
     {noreply, State};
-handle_info(Data, State) ->
-    server:send_data(State#state.server_pid, Data),
+handle_info({privmsg, Data}, State) ->
+    server:send_data(State#state.server_pid, {privmsg, {State#state.channel_name, Data}}),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->

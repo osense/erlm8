@@ -30,9 +30,9 @@ format(join, Chan) ->
     "JOIN :" ++ Chan;
 format(part, Chan) ->
     "PART :" ++ Chan;
+format(privmsg, {Channel, {Target, Text}}) ->
+    "PRIVMSG " ++ Channel ++ " :" ++ Target ++ ": " ++ Text;
 format(privmsg, {Channel, Text}) ->
     "PRIVMSG " ++ Channel ++ " :" ++ Text;
-format(privmsg, {Channel, Target, Text}) ->
-    "PRIVMSG " ++ Channel ++ " :" ++ Target ++ ": " ++ Text;
 format(action, {Channel, Text}) ->
     "PRIVMSG " ++ Channel ++ " :\x01ACTION " ++ Text ++ "\x01".

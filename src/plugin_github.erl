@@ -103,7 +103,7 @@ update_repo(Name, Json, HandlerPid) ->
     Sha = ej:get({"sha"}, Last),
     case get_json(Name) of
             {ok, NewJson} ->
-                {NewLast} = lists:nth(1, Json),
+                {NewLast} = lists:nth(1, NewJson),
                 case ej:get({"sha"}, NewLast) of
                     undefined ->
                         gen_event:call(HandlerPid, ?MODULE, {repo_error, Name, "error parsing json"});

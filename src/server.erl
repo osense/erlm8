@@ -32,8 +32,8 @@ part_channel(ServPid, ChanName) ->
 get_channel(ServPid, ChanName) ->
     gen_server:call(ServPid, {get_channel, ChanName}).
 
-set_nick(ServPid, NickName) ->
-    gen_server:cast(ServPid, {set_nick, NickName}).
+set_nick(ServPid, Nickname) ->
+    gen_server:cast(ServPid, {set_nick, Nickname}).
 
 get_nick(ServPid) ->
     gen_server:call(ServPid, get_nick).
@@ -53,6 +53,7 @@ init([Serv, Port]) ->
     send_data(self(), {ident, {"erlm8", "erlm8"}}),
     send_data(self(), {nick, "erlm8"}),
     {ok, ChanSup} = channel_sup:start_link(),
+    join_channel(self(), "erlm8"),
     {ok, #state {
         server_name = Serv,
         server_port = Port,
@@ -75,9 +76,11 @@ handle_cast({part_channel, ChanName}, State) ->
     channel_sup:kill_channel(State#state.channel_sup, ChanName),
     log:info("left ~p on ~p", [ChanName, State#state.server_name]),
     {noreply, State};
-handle_cast({set_nick, NickName}, State) ->
-    send_data(self(), {nick, NickName}),
-    {noreply, State};
+handle_cast({set_nick, Nickname}, State) ->
+    send_data(self(), {nick, Nickname}),
+    part_channel(self(), State#state.nick),
+    join_channel(self(), Nickname),
+    {noreply, State#state{nick = Nickname}};
 handle_cast({send, {Type, Params}}, State) ->
     log:debug("<< ~p", [{Type, Params}]),
     List = irc:format(Type, Params),

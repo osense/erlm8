@@ -10,16 +10,28 @@
 %% ===================================================================
 
 init([ChanPid]) ->
-    MonPid = spawn_link(?MODULE, loop, [self(), []]),
+    MonPid = spawn_link(?MODULE, start_server, [self()]),
     {ok, {ChanPid, MonPid}}.
 
-handle_event({Source, Target, Text}, {ChanPid, MonPid}) ->
+handle_event({_Source, Target, Text}, {ChanPid, MonPid}) ->
     ServPid = channel:get_server(ChanPid),
     case server:get_nick(ServPid) of
         Target ->
-            case re:run(Text, "^monitor (?<repo>.*)", [{capture, [1], list}]) of
-                {match, [Repo]} ->
-                    MonPid ! {monitor, Repo};
+            case re:run(Text, "^github monitor (?<repo>.*)", [{capture, [1], list}]) of
+                {match, [RepoName]} ->
+                    MonPid ! {monitor, RepoName};
+                _ ->
+                    []
+            end,
+            case re:run(Text, "^github demonitor (?<repo>.*)", [{capture, [1], list}]) of
+                {match, [DemonName]} ->
+                    MonPid ! {demonitor, DemonName};
+                _ ->
+                    []
+            end,
+            case re:run(Text, "^github last (?<repo>.*)", [{capture, [1], list}]) of
+                {match, [LastName]} ->
+                    MonPid ! {last, LastName};
                 _ ->
                     []
             end;
@@ -29,9 +41,11 @@ handle_event({Source, Target, Text}, {ChanPid, MonPid}) ->
 handle_event(_Event, State) ->
     {ok, State}.
 
-handle_call({github_repo_change, Name, Author, Message, Url}, {ChanPid, MonPid}) ->
-    ChanPid ! {privmsg, io_lib:format("[~p commited in ~p]: ~p (~p)",
-                        [Author, Name, re:replace(Message, "(\n)*", " ", [global, {return, list}]), Url])},
+handle_call({repo_message, Name, Author, Message, Url}, {ChanPid, MonPid}) ->
+    ChanPid ! {privmsg, io_lib:format("[github] ~p commited in ~p: ~p (~p)", [Author, Name, Message, Url])},
+    {ok, ok, {ChanPid, MonPid}};
+handle_call({repo_error, Name, Error}, {ChanPid, MonPid}) ->
+    ChanPid ! {privmsg, io_lib:format("[github] ~p: ~p", [Name, Error])},
     {ok, ok, {ChanPid, MonPid}}.
 
 handle_info(_, State) ->
@@ -48,37 +62,90 @@ terminate(_Reason, _State) ->
 %% private functions
 %% ===================================================================
 
-loop(HandlerPid, Repos) ->
-    receive
-        {monitor, Repo} ->
-            loop(HandlerPid, [{Repo, ""} | Repos])
-    after 10000 ->
-        NewRepos = check_repos([], Repos, HandlerPid),
-        loop(HandlerPid, NewRepos)
-    end,
-    loop(HandlerPid, Repos).
+start_server(HandlerPid) ->
+    Pid = self(),
+    spawn_link(fun F() -> Pid ! update, timer:sleep(1000*60*30), F() end),
+    loop(HandlerPid, orddict:new()).
 
-check_repos(NewRepos, [], _) ->
-    NewRepos;
-check_repos(NewRepos, [{Name, LastSha} | Tail], HandlerPid) ->
-    {Sha, Author, Message, Url} = get_nth_commit(1, get_json(Name)),
-    case Sha of
-        LastSha ->
-            check_repos([{Name, LastSha} | NewRepos], Tail, HandlerPid);
-        _ ->
-            gen_event:call(HandlerPid, ?MODULE, {github_repo_change, Name, Author, Message, Url}),
-            check_repos([{Name, Sha} | NewRepos], Tail, HandlerPid)
+loop(HandlerPid, RepoDict) ->
+    receive
+        {monitor, RepoName} ->
+            case get_json(RepoName) of
+                {ok, Json} ->
+                    loop(HandlerPid, orddict:store(RepoName, Json, RepoDict));
+                error ->
+                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, "error getting json"})
+            end;
+        {demonitor, RepoName} ->
+            case orddict:find(RepoName, RepoDict) of
+                {ok, _} ->
+                    loop(HandlerPid, orddict:erase(RepoName, RepoDict));
+                error ->
+                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, "not monitored"})
+            end;
+        {last, RepoName} ->
+            case orddict:find(RepoName, RepoDict) of
+                {ok, Json} ->
+                    {Last} = lists:nth(1, Json),
+                    print_commit(RepoName, Last, HandlerPid);
+                error ->
+                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, "not monitored"})
+            end;
+        update ->
+            NewRepoDict = orddict:map(fun (Key, Val) -> update_repo(Key, Val, HandlerPid) end, RepoDict),
+            loop(HandlerPid, NewRepoDict)
+    end,
+    loop(HandlerPid, RepoDict).
+
+
+update_repo(Name, Json, HandlerPid) ->
+    {Last} = lists:nth(1, Json),
+    Sha = ej:get({"sha"}, Last),
+    case get_json(Name) of
+            {ok, NewJson} ->
+                {NewLast} = lists:nth(1, Json),
+                case ej:get({"sha"}, NewLast) of
+                    undefined ->
+                        gen_event:call(HandlerPid, ?MODULE, {repo_error, Name, "error parsing json"});
+                    Sha ->
+                        Sha;
+                    _NewSha ->
+                        % recursively print all the new commits in the correct (reverse) order
+                        Fun = fun F(OldSha, CompleteJson, Index) ->
+                            {SomeCommit} = lists:nth(Index, Json),
+                            case ej:get({"sha"}, SomeCommit) of
+                                OldSha ->
+                                    [];
+                                _SomeSha ->
+                                    F(OldSha, CompleteJson, Index + 1),
+                                    print_commit(Name, SomeCommit, HandlerPid)
+                            end
+                        end,
+                        Fun(Sha, Json, 1)
+                end,
+                NewJson;
+            error ->
+                gen_event:call(HandlerPid, ?MODULE, {repo_error, Name, "error getting json"}),
+                Json
     end.
+
+print_commit(RepoName, Json, HandlerPid) ->
+    gen_event:call(HandlerPid, ?MODULE, {repo_message, RepoName,
+        binary_to_list(ej:get({"commit", "author", "name"}, Json)),
+        binary_to_list(ej:get({"commit", "message"}, Json)),
+        binary_to_list(ej:get({"html_url"}, Json))}).
+
 
 % so this is pretty bad, but setting up a ssl http connection in erlang is even more so
 get_json(Name) ->
-    jiffy:decode(os:cmd("curl -s --raw https://api.github.com/repos/" ++ Name ++ "/commits")).
-
-get_nth_commit(Index, Json) ->
-    {Commit} = lists:nth(Index, Json),
-    {
-        ej:get({"sha"}, Commit),
-        binary_to_list(ej:get({"commit", "author", "name"}, Commit)),
-        binary_to_list(ej:get({"commit", "message"}, Commit)),
-        binary_to_list(ej:get({"html_url"}, Commit))
-    }.
+    List = os:cmd("curl -s --raw https://api.github.com/repos/" ++ Name ++ "/commits"),
+    try jiffy:decode(List) of
+        % must be a list of commits
+        Json when is_list(Json) ->
+            {ok, Json};
+        _ ->
+            error
+    catch
+        _ ->
+            error
+    end.

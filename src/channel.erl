@@ -52,8 +52,8 @@ get_name(ChanPid) ->
 init([ServPid, ChanName]) ->
     process_flag(trap_exit, true),
     {ok, EventMgr} = gen_event:start_link(),
-    server:send_data(ServPid, {join, ChanName}),
     load_plugin(self(), plugin_channel),
+    load_plugin(self(), plugin_github),
     {ok, #state {
         server_pid = ServPid,
         channel_name = ChanName,
@@ -91,6 +91,5 @@ handle_info({privmsg, Data}, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(Reason, State) ->
-    server:send_data(State#state.server_pid, {part, State#state.channel_name}),
+terminate(Reason, _State) ->
     {shutdown, Reason}.

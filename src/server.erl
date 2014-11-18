@@ -71,8 +71,10 @@ handle_call({get_channel, ChanName}, _From, State) ->
 handle_cast({join_channel, ChanName}, State) ->
     log:info("joining ~p on ~p", [ChanName, State#state.server_name]),
     channel_sup:start_channel(State#state.channel_sup, {self(), ChanName}),
+    server:send_data(self(), {join, ChanName}),
     {noreply, State};
 handle_cast({part_channel, ChanName}, State) ->
+    server:send_data(self(), {part, ChanName}),
     channel_sup:kill_channel(State#state.channel_sup, ChanName),
     log:info("left ~p on ~p", [ChanName, State#state.server_name]),
     {noreply, State};

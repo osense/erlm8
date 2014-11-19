@@ -61,6 +61,7 @@ init([Serv, Port]) ->
         channel_sup = ChanSup,
         tcp_socket = Socket}}.
 
+
 handle_call(get_name, _From, State) ->
     {reply, State#state.server_name, State};
 handle_call(get_nick, _From, State) ->
@@ -68,22 +69,32 @@ handle_call(get_nick, _From, State) ->
 handle_call({get_channel, ChanName}, _From, State) ->
     {reply, channel_sup:get_channel(State#state.channel_sup, ChanName), State}.
 
+
 handle_cast({join_channel, ChanName}, State) ->
     log:info("joining ~p on ~p", [ChanName, State#state.server_name]),
     channel_sup:start_channel(State#state.channel_sup, {self(), ChanName}),
     {noreply, State};
+
 handle_cast({part_channel, ChanName}, State) ->
     channel_sup:kill_channel(State#state.channel_sup, ChanName),
     log:info("left ~p on ~p", [ChanName, State#state.server_name]),
     {noreply, State};
+
 handle_cast({set_nick, Nickname}, State) ->
     send_data(self(), {nick, Nickname}),
     {noreply, State#state{nick = Nickname}};
+
+%% handle sending private messages
+handle_cast({send, {privmsg, {Nick, {Target, Text}}}}, State = #state{nick = Nick}) ->
+    log:debug("<< ~p", [{privmsg, {Target, Text}}]),
+    gen_tcp:send(State#state.tcp_socket, irc:format(privmsg, {Target, Text}) ++ "\r\n"),
+    {noreply, State};
+
 handle_cast({send, {Type, Params}}, State) ->
     log:debug("<< ~p", [{Type, Params}]),
-    List = irc:format(Type, Params),
-    gen_tcp:send(State#state.tcp_socket, List ++ "\r\n"),
+    gen_tcp:send(State#state.tcp_socket, irc:format(Type, Params) ++ "\r\n"),
     {noreply, State}.
+
 
 handle_info({tcp, _Socket, List}, State) ->
     Data = irc:parse(re:replace(List, "(\r\n)*", "", [global, {return, list}])),
@@ -92,8 +103,10 @@ handle_info({tcp, _Socket, List}, State) ->
     case Data of
         {ping, Server} ->
             send_data(self(), {ping, Server});
+        %% handle receiving private messages
         {privmsg, {Nick, Msg}} ->
-            channel:receive_message(channel_sup:get_channel(State#state.channel_sup, Nick), {privmsg_addressed, Msg});
+            PMChan = channel_sup:get_channel(State#state.channel_sup, Nick),
+            channel:receive_message(PMChan, {privmsg_addressed, Msg});
         {privmsg, {Channel, Msg}} ->
             case channel_sup:get_channel(State#state.channel_sup, Channel) of
                 error ->
@@ -107,12 +120,14 @@ handle_info({tcp, _Socket, List}, State) ->
                     end
             end;
         _ ->
-            log:debug("The message above did not match any clause.")
+            []
     end,
     {noreply, State}.
 
+
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
 
 terminate(Reason, _State) ->
     {shutdown, Reason}.

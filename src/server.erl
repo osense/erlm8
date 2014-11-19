@@ -47,17 +47,17 @@ send_data(ServPid, Data) ->
 %% ===================================================================
 
 init([Serv, Port]) ->
+    Nick = "erlm8",
     {ok, Socket} = gen_tcp:connect(Serv, Port,
         [list, {active, true}, {keepalive, true}, {nodelay, true}, {reuseaddr, true}, {packet, 0}]),
-    timer:sleep(2000),
-    send_data(self(), {ident, {"erlm8", "erlm8"}}),
-    send_data(self(), {nick, "erlm8"}),
+    send_data(self(), {ident, {Nick, Nick}}),
+    send_data(self(), {nick, Nick}),
     {ok, ChanSup} = channel_sup:start_link(),
-    join_channel(self(), "erlm8"),
+    join_channel(self(), Nick),
     {ok, #state {
         server_name = Serv,
         server_port = Port,
-        nick = "erlm8",
+        nick = Nick,
         channel_sup = ChanSup,
         tcp_socket = Socket}}.
 
@@ -71,17 +71,13 @@ handle_call({get_channel, ChanName}, _From, State) ->
 handle_cast({join_channel, ChanName}, State) ->
     log:info("joining ~p on ~p", [ChanName, State#state.server_name]),
     channel_sup:start_channel(State#state.channel_sup, {self(), ChanName}),
-    server:send_data(self(), {join, ChanName}),
     {noreply, State};
 handle_cast({part_channel, ChanName}, State) ->
-    server:send_data(self(), {part, ChanName}),
     channel_sup:kill_channel(State#state.channel_sup, ChanName),
     log:info("left ~p on ~p", [ChanName, State#state.server_name]),
     {noreply, State};
 handle_cast({set_nick, Nickname}, State) ->
     send_data(self(), {nick, Nickname}),
-    part_channel(self(), State#state.nick),
-    join_channel(self(), Nickname),
     {noreply, State#state{nick = Nickname}};
 handle_cast({send, {Type, Params}}, State) ->
     log:debug("<< ~p", [{Type, Params}]),
@@ -92,13 +88,26 @@ handle_cast({send, {Type, Params}}, State) ->
 handle_info({tcp, _Socket, List}, State) ->
     Data = irc:parse(re:replace(List, "(\r\n)*", "", [global, {return, list}])),
     log:debug(">> ~p", [Data]),
+    Nick = State#state.nick,
     case Data of
         {ping, Server} ->
             send_data(self(), {ping, Server});
-        {privmsg, {Channel, MsgInfo}} ->
-            channel:receive_data(channel_sup:get_channel(State#state.channel_sup, Channel), MsgInfo);
+        {privmsg, {Nick, Msg}} ->
+            channel:receive_message(channel_sup:get_channel(State#state.channel_sup, Nick), {privmsg_addressed, Msg});
+        {privmsg, {Channel, Msg}} ->
+            case channel_sup:get_channel(State#state.channel_sup, Channel) of
+                error ->
+                    log:error("received a privmsg in ~p, but couldn't find the channel Pid", [Channel]);
+                Pid ->
+                    case Msg of
+                        {Source, Nick, Text} ->
+                            channel:receive_message(Pid, {privmsg_addressed, {Source, Text}});
+                        _ ->
+                            channel:receive_message(Pid, {privmsg, Msg})
+                    end
+            end;
         _ ->
-            []
+            log:debug("The message above did not match any clause.")
     end,
     {noreply, State}.
 

@@ -3,7 +3,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--export([start_link/2, load_plugin/2, receive_data/2]).
+-export([start_link/2, receive_message/2, load_plugin/2]).
 -export([add_op/2, remove_op/2, is_op/2]).
 -export([get_server/1, get_name/1]).
 
@@ -21,11 +21,11 @@
 start_link(ServPid, ChanName) ->
     gen_server:start_link(?MODULE, [ServPid, ChanName], []).
 
+receive_message(ChanPid, Msg) ->
+    gen_server:cast(ChanPid, {receive_message, Msg}).
+
 load_plugin(ChanPid, Plugin) ->
     gen_server:cast(ChanPid, {load_plugin, Plugin}).
-
-receive_data(ChanPid, Data) ->
-    gen_server:cast(ChanPid, {receive_data, Data}).
 
 
 add_op(ChanPid, Nickname) ->
@@ -54,6 +54,7 @@ init([ServPid, ChanName]) ->
     {ok, EventMgr} = gen_event:start_link(),
     load_plugin(self(), plugin_channel),
     load_plugin(self(), plugin_github),
+    server:send_data(ServPid, {join, ChanName}),
     {ok, #state {
         server_pid = ServPid,
         channel_name = ChanName,
@@ -67,11 +68,12 @@ handle_call(get_server, _From, State) ->
 handle_call(get_name, _From, State) ->
     {reply, State#state.channel_name, State}.
 
+
+handle_cast({receive_message, Msg}, State) ->
+    gen_event:notify(State#state.event_manager, Msg),
+    {noreply, State};
 handle_cast({load_plugin, Plugin}, State) ->
     gen_event:add_sup_handler(State#state.event_manager, Plugin, [self()]),
-    {noreply, State};
-handle_cast({receive_data, Data}, State) ->
-    gen_event:notify(State#state.event_manager, Data),
     {noreply, State};
 handle_cast({add_op, Nickname}, State) ->
     NewOps = [Nickname | State#state.ops],
@@ -79,6 +81,7 @@ handle_cast({add_op, Nickname}, State) ->
 handle_cast({remove_op, Nickname}, State) ->
     NewOps = lists:delete(Nickname, State#state.ops),
     {noreply, State#state{ops = NewOps }}.
+
 
 handle_info({gen_event_EXIT, Handler, Reason}, State) ->
     log:info("~p crashed, restarting(~n~p)", [Handler, Reason]),
@@ -88,8 +91,11 @@ handle_info({privmsg, Data}, State) ->
     server:send_data(State#state.server_pid, {privmsg, {State#state.channel_name, Data}}),
     {noreply, State}.
 
+
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(Reason, _State) ->
+
+terminate(Reason, State) ->
+    server:send_data(State#state.server_pid, {part, State#state.channel_name}),
     {shutdown, Reason}.

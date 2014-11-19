@@ -23,14 +23,17 @@ kill_channel(ChanSupPid, ChanName) ->
 
 get_channel(ChanSupPid, Name) ->
     ChanPids = lists:map(fun({_, Child, _, _}) -> Child end, supervisor:which_children(ChanSupPid)),
-    FindChanFun = fun F([H | Tail], N) ->
-        case channel:get_name(H) of
-            Name ->
-                H;
-            _ ->
-                F(Tail, N)
-        end
-    end,
+    FindChanFun =
+        fun F([H | Tail], N) ->
+            case channel:get_name(H) of
+                Name ->
+                    H;
+                _ ->
+                    F(Tail, N)
+            end;
+        F([], _) ->
+            error
+        end,
     FindChanFun(ChanPids, Name).
 
 

@@ -11,29 +11,25 @@
 init([ChanPid]) ->
     {ok, ChanPid}.
 
-handle_event({Source, Target, Text}, ChanPid) ->
+handle_event({privmsg_addressed, {Source, Text}}, ChanPid) ->
     ServPid = channel:get_server(ChanPid),
-    case server:get_nick(ServPid) of
-        Target ->
-            case re:run(Text, "leave|part|go away") of
-                {match, _} ->
-                    case channel:is_op(ChanPid, Source) of
-                        true ->
-                            server:part_channel(ServPid, channel:get_name(ChanPid));
-                        false ->
-                            ChanPid ! {privmsg, {Source, "I'm afraid you can't do that."}}
-                    end;
-                _ ->
-                    []
-            end,
-            case re:run(Text, "^join (?<channel>.*)", [{capture, [1], list}]) of
-                {match, [ChanName]} ->
-                    server:join_channel(ServPid, ChanName),
-                    channel:add_op(server:get_channel(ServPid, ChanName), Source);
-                _ ->
-                    []
+    case re:run(Text, "^(leave|part|go away)") of
+        {match, _} ->
+            case channel:is_op(ChanPid, Source) of
+                true ->
+                    server:part_channel(ServPid, channel:get_name(ChanPid));
+                false ->
+                    ChanPid ! {privmsg, {Source, "I'm afraid you can't do that."}}
             end;
-        _ -> []
+        _ ->
+            []
+    end,
+    case re:run(Text, "^join (?<channel>.*)", [{capture, [1], list}]) of
+        {match, [ChanName]} ->
+            server:join_channel(ServPid, ChanName),
+            channel:add_op(server:get_channel(ServPid, ChanName), Source);
+        _ ->
+            []
     end,
     {ok, ChanPid};
 handle_event(_Event, State) ->

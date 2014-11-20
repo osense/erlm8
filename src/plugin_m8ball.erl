@@ -12,7 +12,7 @@ init([ChanPid]) ->
     {ok, ChanPid}.
 
 handle_event({privmsg_addressed, {Source, Text}}, ChanPid) ->
-    case re:run(Text, "^(am|are|you|is|can|what|would|will) (?<question>.+)\?", [{capture, [2], list}]) of
+    case re:run(Text, "^(am|are|you|is|can|what|would|will) (?<question>.+)\?", [caseless, {capture, [2], list}]) of
         {match, [Question]} ->
             ChanPid ! {privmsg, {Source, random_reply(Question)}};
         _ ->
@@ -46,7 +46,7 @@ random_reply(Question) ->
 random_replies() ->
     [
         "quite possibly",
-        "definitelly maybe",
+        "definitely maybe",
         "you are one cheeky kunt m8",
         "don't be ridiculous",
         "yes",

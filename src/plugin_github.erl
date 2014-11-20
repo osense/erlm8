@@ -13,29 +13,24 @@ init([ChanPid]) ->
     MonPid = spawn_link(?MODULE, start_server, [self()]),
     {ok, {ChanPid, MonPid}}.
 
-handle_event({_Source, Target, Text}, {ChanPid, MonPid}) ->
-    ServPid = channel:get_server(ChanPid),
-    case server:get_nick(ServPid) of
-        Target ->
-            case re:run(Text, "^github monitor (?<repo>.*)", [{capture, [1], list}]) of
-                {match, [RepoName]} ->
-                    MonPid ! {monitor, RepoName};
-                _ ->
-                    []
-            end,
-            case re:run(Text, "^github demonitor (?<repo>.*)", [{capture, [1], list}]) of
-                {match, [DemonName]} ->
-                    MonPid ! {demonitor, DemonName};
-                _ ->
-                    []
-            end,
-            case re:run(Text, "^github last (?<repo>.*)", [{capture, [1], list}]) of
-                {match, [LastName]} ->
-                    MonPid ! {last, LastName};
-                _ ->
-                    []
-            end;
-        _ -> []
+handle_event({privmsg_addressed, {_Source, Text}}, {ChanPid, MonPid}) ->
+    case re:run(Text, "^github monitor (?<repo>.*)", [{capture, [1], list}]) of
+        {match, [RepoName]} ->
+            MonPid ! {monitor, RepoName};
+        _ ->
+            []
+    end,
+    case re:run(Text, "^github demonitor (?<repo>.*)", [{capture, [1], list}]) of
+        {match, [DemonName]} ->
+            MonPid ! {demonitor, DemonName};
+        _ ->
+            []
+    end,
+    case re:run(Text, "^github last (?<repo>.*)", [{capture, [1], list}]) of
+        {match, [LastName]} ->
+            MonPid ! {last, LastName};
+        _ ->
+            []
     end,
     {ok, {ChanPid, MonPid}};
 handle_event(_Event, State) ->
@@ -63,8 +58,7 @@ terminate(_Reason, _State) ->
 %% ===================================================================
 
 start_server(HandlerPid) ->
-    Pid = self(),
-    spawn_link(fun F() -> Pid ! update, timer:sleep(1000*60*30), F() end),
+    timer:send_interval(1000*60*30, update),
     loop(HandlerPid, orddict:new()).
 
 loop(HandlerPid, RepoDict) ->
@@ -106,13 +100,13 @@ update_repo(Name, Json, HandlerPid) ->
                 {NewLast} = lists:nth(1, NewJson),
                 case ej:get({"sha"}, NewLast) of
                     undefined ->
-                        gen_event:call(HandlerPid, ?MODULE, {repo_error, Name, "error parsing json"});
+                        log:info("plugin_github failed to parse json in ~p", [Name]);
                     Sha ->
-                        Sha;
+                        [];
                     _NewSha ->
-                        % recursively print all the new commits in the correct (reverse) order
+                        %% recursively print all the new commits in the correct (reverse) order
                         Fun = fun F(OldSha, CompleteJson, Index) ->
-                            {SomeCommit} = lists:nth(Index, Json),
+                            {SomeCommit} = lists:nth(Index, NewJson),
                             case ej:get({"sha"}, SomeCommit) of
                                 OldSha ->
                                     [];
@@ -121,11 +115,11 @@ update_repo(Name, Json, HandlerPid) ->
                                     print_commit(Name, SomeCommit, HandlerPid)
                             end
                         end,
-                        Fun(Sha, Json, 1)
+                        Fun(Sha, NewJson, 1)
                 end,
                 NewJson;
             error ->
-                gen_event:call(HandlerPid, ?MODULE, {repo_error, Name, "error getting json"}),
+                log:info("plugin_github failed to retrieve json in ~p", [Name]),
                 Json
     end.
 

@@ -1,3 +1,6 @@
+% This file is part of erlm8 released under the MIT license.
+% See the LICENSE file for more information.
+
 -module(plugin_m8ball).
 -behaviour(gen_event).
 
@@ -12,9 +15,9 @@ init([ChanPid]) ->
     {ok, ChanPid}.
 
 handle_event({privmsg_addressed, {Source, Text}}, ChanPid) ->
-    case re:run(Text, "^(am|are|you|is|can|what|would|will) (?<question>.+)\?", [caseless, {capture, [2], list}]) of
+    case re:run(Text, "^(am|are|you|is|can|would|will|does|do|could|should|shall|might) (?<question>.+)\?", [caseless, {capture, [2], binary}]) of
         {match, [Question]} ->
-            ChanPid ! {privmsg, {Source, random_reply(Question)}};
+            channel:send_message(ChanPid, {Source, random_reply(Question)});
         _ ->
             []
     end,
@@ -45,13 +48,13 @@ random_reply(Question) ->
 
 random_replies() ->
     [
-        "quite possibly",
-        "definitely maybe",
-        "you are one cheeky kunt m8",
-        "don't be ridiculous",
-        "yes",
-        "no",
-        "it is certain",
-        "there can only be one answer"
+        <<"quite possibly">>,
+        <<"definitely maybe">>,
+        <<"you are one cheeki kunt m8">>,
+        <<"don't be ridiculous">>,
+        <<"yes">>,
+        <<"no">>,
+        <<"it is certain">>,
+        <<"there can only be one answer">>
     ].
 

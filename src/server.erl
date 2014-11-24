@@ -1,3 +1,6 @@
+% This file is part of erlm8 released under the MIT license.
+% See the LICENSE file for more information.
+
 -module(server).
 -behaviour(gen_server).
 
@@ -47,9 +50,9 @@ send_data(ServPid, Data) ->
 %% ===================================================================
 
 init([Serv, Port]) ->
-    Nick = "erlm8",
-    {ok, Socket} = gen_tcp:connect(Serv, Port,
-        [list, {active, true}, {keepalive, true}, {nodelay, true}, {reuseaddr, true}, {packet, 0}]),
+    Nick = <<"erlm8">>,
+    {ok, Socket} = gen_tcp:connect(binary_to_list(Serv), Port,
+        [binary, {active, true}, {keepalive, true}, {nodelay, true}, {reuseaddr, true}, {packet, 0}]),
     send_data(self(), {ident, {Nick, Nick}}),
     send_data(self(), {nick, Nick}),
     {ok, ChanSup} = channel_sup:start_link(),
@@ -87,19 +90,20 @@ handle_cast({set_nick, Nickname}, State) ->
 %% handle sending private messages
 handle_cast({send, {privmsg, {Nick, {Target, Text}}}}, State = #state{nick = Nick}) ->
     log:debug("<< ~p", [{privmsg, {Target, Text}}]),
-    gen_tcp:send(State#state.tcp_socket, irc:format(privmsg, {Target, Text}) ++ "\r\n"),
+    B = irc:format(privmsg, {Target, Text}),
+    gen_tcp:send(State#state.tcp_socket, <<B/binary, "\r\n">>),
     {noreply, State};
 
 handle_cast({send, {Type, Params}}, State) ->
     log:debug("<< ~p", [{Type, Params}]),
-    gen_tcp:send(State#state.tcp_socket, irc:format(Type, Params) ++ "\r\n"),
+    B = irc:format(Type, Params),
+    gen_tcp:send(State#state.tcp_socket, <<B/binary, "\r\n">>),
     {noreply, State}.
 
 
-handle_info({tcp, _Socket, List}, State) ->
-    Data = irc:parse(re:replace(List, "(\r\n)*", "", [global, {return, list}])),
+handle_info({tcp, _Socket, Binary}, State = #state{nick = Nick}) ->
+    Data = irc:parse(re:replace(Binary, "(\r\n)*", "", [global, {return, binary}])),
     log:debug(">> ~p", [Data]),
-    Nick = State#state.nick,
     case Data of
         {ping, Server} ->
             send_data(self(), {ping, Server});

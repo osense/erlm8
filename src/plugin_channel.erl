@@ -1,3 +1,6 @@
+% This file is part of erlm8 released under the MIT license.
+% See the LICENSE file for more information.
+
 -module(plugin_channel).
 -behaviour(gen_event).
 
@@ -19,12 +22,12 @@ handle_event({privmsg_addressed, {Source, Text}}, ChanPid) ->
                 true ->
                     server:part_channel(ServPid, channel:get_name(ChanPid));
                 false ->
-                    ChanPid ! {privmsg, {Source, "I'm afraid you can't do that."}}
+                    channel:send_message(ChanPid, {Source, <<"I'm afraid you can't do that.">>})
             end;
         _ ->
             []
     end,
-    case re:run(Text, "^join (?<channel>.*)", [{capture, [1], list}]) of
+    case re:run(Text, "^join (?<channel>.*)", [{capture, [1], binary}]) of
         {match, [ChanName]} ->
             server:join_channel(ServPid, ChanName),
             channel:add_op(server:get_channel(ServPid, ChanName), Source);

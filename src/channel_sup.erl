@@ -1,3 +1,6 @@
+% This file is part of erlm8 released under the MIT license.
+% See the LICENSE file for more information.
+
 -module(channel_sup).
 -behaviour(supervisor).
 
@@ -24,17 +27,17 @@ kill_channel(ChanSupPid, ChanName) ->
 get_channel(ChanSupPid, Name) ->
     ChanPids = lists:map(fun({_, Child, _, _}) -> Child end, supervisor:which_children(ChanSupPid)),
     FindChanFun =
-        fun F([H | Tail], N) ->
+        fun F([H | Tail]) ->
             case channel:get_name(H) of
                 Name ->
                     H;
                 _ ->
-                    F(Tail, N)
+                    F(Tail)
             end;
-        F([], _) ->
+        F([]) ->
             error
         end,
-    FindChanFun(ChanPids, Name).
+    FindChanFun(ChanPids).
 
 
 %% ===================================================================

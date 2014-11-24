@@ -1,3 +1,6 @@
+% This file is part of erlm8 released under the MIT license.
+% See the LICENSE file for more information.
+
 -module(plugin_github).
 -behaviour(gen_event).
 -compile(export_all).
@@ -14,19 +17,19 @@ init([ChanPid]) ->
     {ok, {ChanPid, MonPid}}.
 
 handle_event({privmsg_addressed, {_Source, Text}}, {ChanPid, MonPid}) ->
-    case re:run(Text, "^github monitor (?<repo>.*)", [{capture, [1], list}]) of
+    case re:run(Text, "^github monitor (?<repo>.*)", [{capture, [1], binary}]) of
         {match, [RepoName]} ->
             MonPid ! {monitor, RepoName};
         _ ->
             []
     end,
-    case re:run(Text, "^github demonitor (?<repo>.*)", [{capture, [1], list}]) of
+    case re:run(Text, "^github demonitor (?<repo>.*)", [{capture, [1], binary}]) of
         {match, [DemonName]} ->
             MonPid ! {demonitor, DemonName};
         _ ->
             []
     end,
-    case re:run(Text, "^github last (?<repo>.*)", [{capture, [1], list}]) of
+    case re:run(Text, "^github last (?<repo>.*)", [{capture, [1], binary}]) of
         {match, [LastName]} ->
             MonPid ! {last, LastName};
         _ ->
@@ -37,10 +40,10 @@ handle_event(_Event, State) ->
     {ok, State}.
 
 handle_call({repo_message, Name, Author, Message, Url}, {ChanPid, MonPid}) ->
-    ChanPid ! {privmsg, io_lib:format("[github] ~p commited in ~p: ~p (~p)", [Author, Name, Message, Url])},
+    channel:send_message(ChanPid, <<"[github] ", Author/binary, " commited in ", Name/binary, ": ", Message/binary, " (", Url/binary, ")">>),
     {ok, ok, {ChanPid, MonPid}};
 handle_call({repo_error, Name, Error}, {ChanPid, MonPid}) ->
-    ChanPid ! {privmsg, io_lib:format("[github] ~p: ~p", [Name, Error])},
+    channel:send_message(ChanPid, <<"[github] ", Name/binary, ": ", Error/binary>>),
     {ok, ok, {ChanPid, MonPid}}.
 
 handle_info(_, State) ->
@@ -68,14 +71,14 @@ loop(HandlerPid, RepoDict) ->
                 {ok, Json} ->
                     loop(HandlerPid, orddict:store(RepoName, Json, RepoDict));
                 error ->
-                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, "error getting json"})
+                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, <<"error getting json">>})
             end;
         {demonitor, RepoName} ->
             case orddict:find(RepoName, RepoDict) of
                 {ok, _} ->
                     loop(HandlerPid, orddict:erase(RepoName, RepoDict));
                 error ->
-                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, "not monitored"})
+                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, <<"not monitored">>})
             end;
         {last, RepoName} ->
             case orddict:find(RepoName, RepoDict) of
@@ -83,7 +86,7 @@ loop(HandlerPid, RepoDict) ->
                     {Last} = lists:nth(1, Json),
                     print_commit(RepoName, Last, HandlerPid);
                 error ->
-                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, "not monitored"})
+                    gen_event:call(HandlerPid, ?MODULE, {repo_error, RepoName, <<"not monitored">>})
             end;
         update ->
             NewRepoDict = orddict:map(fun (Key, Val) -> update_repo(Key, Val, HandlerPid) end, RepoDict),
@@ -125,14 +128,14 @@ update_repo(Name, Json, HandlerPid) ->
 
 print_commit(RepoName, Json, HandlerPid) ->
     gen_event:call(HandlerPid, ?MODULE, {repo_message, RepoName,
-        binary_to_list(ej:get({"commit", "author", "name"}, Json)),
-        binary_to_list(ej:get({"commit", "message"}, Json)),
-        binary_to_list(ej:get({"html_url"}, Json))}).
+        ej:get({"commit", "author", "name"}, Json),
+        ej:get({"commit", "message"}, Json),
+        ej:get({"html_url"}, Json)}).
 
 
 % so this is pretty bad, but setting up a ssl http connection in erlang is even more so
 get_json(Name) ->
-    List = os:cmd("curl -s --raw https://api.github.com/repos/" ++ Name ++ "/commits"),
+    List = os:cmd("curl -s --raw https://api.github.com/repos/" ++ binary_to_list(Name) ++ "/commits"),
     try jiffy:decode(List) of
         % must be a list of commits
         Json when is_list(Json) ->

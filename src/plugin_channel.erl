@@ -15,11 +15,14 @@ init([ChanPid]) ->
     {ok, ChanPid}.
 
 handle_event({privmsg_addressed, {Source, <<"leave">>}}, ChanPid) ->
-    handle_part(Source, ChanPid);
+    handle_part(Source, ChanPid),
+    {ok, ChanPid};
 handle_event({privmsg_addressed, {Source, <<"part">>}}, ChanPid) ->
-    handle_part(Source, ChanPid);
+    handle_part(Source, ChanPid),
+    {ok, ChanPid};
 handle_event({privmsg_addressed, {Source, <<"go away">>}}, ChanPid) ->
-    handle_part(Source, ChanPid);
+    handle_part(Source, ChanPid),
+    {ok, ChanPid};
 handle_event({privmsg_addressed, {Source, <<"join ", ChanName/binary>>}}, ChanPid) ->
     ServPid = channel:get_server(ChanPid),
     server:join_channel(ServPid, ChanName),

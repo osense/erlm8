@@ -14,26 +14,16 @@
 init([ChanPid]) ->
     {ok, ChanPid}.
 
-handle_event({privmsg_addressed, {Source, Text}}, ChanPid) ->
+handle_event({privmsg_addressed, {Source, <<"leave">>}}, ChanPid) ->
+    handle_part(Source, ChanPid);
+handle_event({privmsg_addressed, {Source, <<"part">>}}, ChanPid) ->
+    handle_part(Source, ChanPid);
+handle_event({privmsg_addressed, {Source, <<"go away">>}}, ChanPid) ->
+    handle_part(Source, ChanPid);
+handle_event({privmsg_addressed, {Source, <<"join ", ChanName/binary>>}}, ChanPid) ->
     ServPid = channel:get_server(ChanPid),
-    case re:run(Text, "^(leave|part|go away)") of
-        {match, _} ->
-            case channel:is_op(ChanPid, Source) of
-                true ->
-                    server:part_channel(ServPid, channel:get_name(ChanPid));
-                false ->
-                    channel:send_message(ChanPid, {Source, <<"I'm afraid you can't do that.">>})
-            end;
-        _ ->
-            []
-    end,
-    case re:run(Text, "^join (?<channel>.*)", [{capture, [1], binary}]) of
-        {match, [ChanName]} ->
-            server:join_channel(ServPid, ChanName),
-            channel:add_op(server:get_channel(ServPid, ChanName), Source);
-        _ ->
-            []
-    end,
+    server:join_channel(ServPid, ChanName),
+    channel:add_op(server:get_channel(ServPid, ChanName), Source),
     {ok, ChanPid};
 handle_event(_Event, State) ->
     {ok, State}.
@@ -49,3 +39,16 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, _State) ->
     ok.
+
+
+%% ===================================================================
+%% private functions
+%% ===================================================================
+
+handle_part(Source, ChanPid) ->
+    case channel:is_op(ChanPid, Source) of
+        true ->
+            server:part_channel(channel:get_server(ChanPid), channel:get_name(ChanPid));
+        false ->
+            channel:send_message(ChanPid, {Source, <<"I'm afraid you can't do that.">>})
+    end.

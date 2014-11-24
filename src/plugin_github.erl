@@ -3,9 +3,9 @@
 
 -module(plugin_github).
 -behaviour(gen_event).
--compile(export_all).
 
 -export([init/1, handle_event/2, handle_call/2, handle_info/2, code_change/3, terminate/2]).
+-export([start_server/1]).
 
 
 %% ===================================================================
@@ -16,25 +16,14 @@ init([ChanPid]) ->
     MonPid = spawn_link(?MODULE, start_server, [self()]),
     {ok, {ChanPid, MonPid}}.
 
-handle_event({privmsg_addressed, {_Source, Text}}, {ChanPid, MonPid}) ->
-    case re:run(Text, "^github monitor (?<repo>.*)", [{capture, [1], binary}]) of
-        {match, [RepoName]} ->
-            MonPid ! {monitor, RepoName};
-        _ ->
-            []
-    end,
-    case re:run(Text, "^github demonitor (?<repo>.*)", [{capture, [1], binary}]) of
-        {match, [DemonName]} ->
-            MonPid ! {demonitor, DemonName};
-        _ ->
-            []
-    end,
-    case re:run(Text, "^github last (?<repo>.*)", [{capture, [1], binary}]) of
-        {match, [LastName]} ->
-            MonPid ! {last, LastName};
-        _ ->
-            []
-    end,
+handle_event({privmsg_addressed, {_Source, <<"github monitor ", Repo/binary>>}}, {ChanPid, MonPid}) ->
+    MonPid ! {monitor, Repo},
+    {ok, {ChanPid, MonPid}};
+handle_event({privmsg_addressed, {_Source, <<"github demonitor ", Repo/binary>>}}, {ChanPid, MonPid}) ->
+    MonPid ! {demonitor, Repo},
+    {ok, {ChanPid, MonPid}};
+handle_event({privmsg_addressed, {_Source, <<"github last ", Repo/binary>>}}, {ChanPid, MonPid}) ->
+    MonPid ! {last, Repo},
     {ok, {ChanPid, MonPid}};
 handle_event(_Event, State) ->
     {ok, State}.
@@ -130,7 +119,8 @@ print_commit(RepoName, Json, HandlerPid) ->
     gen_event:call(HandlerPid, ?MODULE, {repo_message, RepoName,
         ej:get({"commit", "author", "name"}, Json),
         ej:get({"commit", "message"}, Json),
-        ej:get({"html_url"}, Json)}).
+        ej:get({"html_url"}, Json)}
+    ).
 
 
 % so this is pretty bad, but setting up a ssl http connection in erlang is even more so

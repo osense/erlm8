@@ -16,11 +16,21 @@ init([ChanPid]) ->
     MonPid = spawn_link(?MODULE, start_server, [self()]),
     {ok, {ChanPid, MonPid}}.
 
-handle_event({privmsg_addressed, {_Source, <<"github monitor ", Repo/binary>>}}, {ChanPid, MonPid}) ->
-    MonPid ! {monitor, Repo},
+handle_event({privmsg_addressed, {Source, <<"github monitor ", Repo/binary>>}}, {ChanPid, MonPid}) ->
+    case channel:is_op(ChanPid, Source) of
+        true ->
+            MonPid ! {monitor, Repo};
+        _ ->
+            channel:send_message(ChanPid, {Source, <<"I'm afraid you can't do that.">>})
+    end,
     {ok, {ChanPid, MonPid}};
-handle_event({privmsg_addressed, {_Source, <<"github demonitor ", Repo/binary>>}}, {ChanPid, MonPid}) ->
-    MonPid ! {demonitor, Repo},
+handle_event({privmsg_addressed, {Source, <<"github demonitor ", Repo/binary>>}}, {ChanPid, MonPid}) ->
+    case channel:is_op(ChanPid, Source) of
+        true ->
+            MonPid ! {demonitor, Repo};
+        _ ->
+            channel:send_message(ChanPid, {Source, <<"I'm afraid you can't do that.">>})
+    end,
     {ok, {ChanPid, MonPid}};
 handle_event({privmsg_addressed, {_Source, <<"github last ", Repo/binary>>}}, {ChanPid, MonPid}) ->
     MonPid ! {last, Repo},

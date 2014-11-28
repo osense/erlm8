@@ -23,10 +23,11 @@ handle_event({privmsg_addressed, {Source, <<"part">>}}, ChanPid) ->
 handle_event({privmsg_addressed, {Source, <<"go away">>}}, ChanPid) ->
     handle_part(Source, ChanPid),
     {ok, ChanPid};
-handle_event({privmsg_addressed, {Source, <<"join ", ChanName/binary>>}}, ChanPid) ->
+handle_event({privmsg_addressed, {Source, <<"join #", ChanName/binary>>}}, ChanPid) ->
+    Chan = <<"#", ChanName/binary>>,
     ServPid = channel:get_server(ChanPid),
-    server:join_channel(ServPid, ChanName),
-    channel:add_op(server:get_channel(ServPid, ChanName), Source),
+    server:join_channel(ServPid, Chan),
+    channel:add_op(server:get_channel(ServPid, Chan), Source),
     {ok, ChanPid};
 handle_event(_Event, State) ->
     {ok, State}.
